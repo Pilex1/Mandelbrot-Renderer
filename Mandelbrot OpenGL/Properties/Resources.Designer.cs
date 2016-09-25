@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace Mandelbrot_OpenGL.Properties {
+namespace Mandelbrot.Properties {
 
 
     /// <summary>
