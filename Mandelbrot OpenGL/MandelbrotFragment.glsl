@@ -16,6 +16,8 @@ const int specLen = 50;
 
 const float ln2 = log(2);
 
+bool debug = false;
+
 vec3 colours[6] = vec3[] (
 vec3(64, 63, 42),
 vec3(215, 123, 25),
@@ -25,15 +27,53 @@ vec3(87, 40, 209),
 vec3(64, 63, 42)
 );
 
+struct CNum {
+	float re, im;
+};
 
-float iter(vec2 c) {
-	vec2 z = vec2(0, 0);
+CNum cadd(CNum a, CNum b) {
+	return CNum(a.re + b.re, a.im + b.im);
+}
+CNum csub(CNum a, CNum b) {
+	return CNum(a.re - b.re, a.im - b.im);
+}
+CNum cmul(CNum a, CNum b) {
+	return CNum(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
+}
+CNum csquare(CNum a) {
+	return CNum(a.re * a.re - a.im * a.im, 2 * a.re * a.im);
+}
+CNum cdiv(CNum a, CNum b) {
+	float den = b.re * b.re + b.im * b.im;
+	return CNum((a.re * b.re + a.im * b.im) / den, (a.im * b.re + a.re * b.im) / den);
+}
+float cmodsq(CNum a) {
+	return a.re * a.re + a.im * a.im;
+}
+float cmod(CNum a) {
+	return sqrt(a.re * a.re + a.im * a.im);
+}
+CNum crecpcl(CNum a) {
+	float den = cmodsq(a);
+	if (den == 0) {
+		return CNum(0, 0);
+	} else {
+		return CNum(a.re / den, -a.im / den);
+	}
+}
+
+float iter(CNum c) {
+	CNum z = CNum(0, 0);
 	for (int i = 0; i < maxIter; i++) {
-		z = vec2(z.x * z.x - z.y * z.y + c.x, 2 * z.x * z.y + c.y);
-		if (z.x * z.x + z.y * z.y > 4) {
-			z = vec2(z.x * z.x - z.y * z.y + c.x, 2 * z.x * z.y + c.y);
-			z = vec2(z.x * z.x - z.y * z.y + c.x, 2 * z.x * z.y + c.y);
-			float mod = sqrt(z.x * z.x + z.y * z.y);
+		z = csquare(z);
+		z = cadd(z, c);
+		if (cmodsq(z) > 4) {
+			z = csquare(z);
+			z = cadd(z, c);
+			z = csquare(z);
+			z = cadd(z, c);
+			float mod = cmod(z);
+			if (mod <= 1) return i;
 			return i - log(log(mod)) / ln2;
 		}
 	}
@@ -62,22 +102,30 @@ vec3 calcClr(float i) {
 
 void main(void) {
 	vec2 z = fpos;
+	bool line = false;
+	if (
+		(abs(z.x + 0.5f) < 0.001 || abs(z.y) < 0.001 * aspectRatio) && 
+		((z.x + 0.5f) * (z.x + 0.5f) + (z.y / aspectRatio) * (z.y / aspectRatio) <= 0.002f)
+	) line = true;
+	z.y /= aspectRatio;
+	z.x += 0.5f;
+	z = (vec4(z, 0, 1) * rot).xy;
+	z.x *= zoom;
+	z.y *= zoom;
+	z += pos;
 
-	if (abs(z.x + 0.5f) < 0.001 || abs(z.y) < 0.001 * aspectRatio) frag = vec4(1, 1, 1, 1);
+	float iter = iter(CNum(z.x, z.y));
+	if (iter == maxIter) frag = vec4(0, 0, 0, 1);
 	else {
-		z.y /= aspectRatio;
-		z = (vec4(z, 0, 1) * rot).xy;
-		z.x *= zoom;
-		z.y *= zoom;
-		z += pos;
-		z.x += 1f;
-
-		float iter = iter(z);
-		if (iter == maxIter) frag = vec4(0, 0, 0, 1);
-		else {
-			vec3 clr = calcClr(mod(iter, specLen) / specLen);
-			frag = vec4(clr, 1);
-		}
+		frag = vec4(calcClr(mod(iter, specLen) / specLen), 1);
 	}
+
+	if (line) {
+		frag.x = 1 - frag.x;
+		frag.y = 1 - frag.y;
+		frag.z = 1 - frag.z;
+	}
+
+	if (debug) frag = vec4(1, 1, 1, 1);
 }
 

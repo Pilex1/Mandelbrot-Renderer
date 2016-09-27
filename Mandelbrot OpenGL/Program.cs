@@ -13,6 +13,8 @@ namespace Mandelbrot {
 
         static ShaderProgram mandShader;
         static ShaderProgram juliaShader;
+        static ShaderProgram textShader;
+
         static VBO<Vector2> mandVertices;
         static VBO<Vector2> juliaVertices;
         static VBO<int> elements;
@@ -38,6 +40,8 @@ namespace Mandelbrot {
         static int fps;
         static Stopwatch watch = new Stopwatch();
 
+        static Text mandText;
+        static Text juliaText;
 
         static void Main() {
             Glut.glutInit();
@@ -50,7 +54,7 @@ namespace Mandelbrot {
             Glut.glutInitWindowSize(width, height);
             Glut.glutCreateWindow(titleName);
 
-            //Glut.glutReshapeFunc(OnReshape);
+            Glut.glutReshapeFunc(OnReshape);
 
             Glut.glutKeyboardFunc(OnKeyDown);
             Glut.glutKeyboardUpFunc(OnKeyUp);
@@ -63,7 +67,6 @@ namespace Mandelbrot {
             Glut.glutDisplayFunc(delegate () { });
             Glut.glutIdleFunc(MainLoop);
 
-            Text.Init("Chiller");
             Init();
 
             Glut.glutMainLoop();
@@ -77,7 +80,6 @@ namespace Mandelbrot {
             Console.WriteLine("Mandelbrot shader log: ");
             Console.WriteLine(mandShader.ProgramLog);
             Console.WriteLine();
-            mandShader.Use();
             mandVertices = new VBO<Vector2>(new Vector2[] {
                 new Vector2(-1,1),
                 new Vector2(-1,-1),
@@ -97,6 +99,29 @@ namespace Mandelbrot {
             });
 
             elements = new VBO<int>(new int[] { 0, 1, 2, 3, 0 }, BufferTarget.ElementArrayBuffer);
+
+            textShader = new ShaderProgram(LoadFromFile("TextVertex.glsl"), LoadFromFile("TextFragment.glsl"));
+            Console.WriteLine("Text shader log: ");
+            Console.WriteLine(mandShader.ProgramLog);
+            Console.WriteLine();
+
+            Font font = new Font("Constantia", 50, new Vector3(0, 0, 0.5));
+            mandText = new Text(font);
+            juliaText = new Text(font);
+        }
+
+        private static void ResetMandelbrot() {
+            maxIter = 1500f;
+            mandZoom = 2;
+            mandRot = 0;
+            mandPos = Vector2.Zero;
+        }
+
+        private static void ResetJulia() {
+            maxIter = 1500f;
+            juliaZoom = 2;
+            juliaRot = 0;
+            juliaPos = Vector2.Zero;
         }
 
         private static void MainLoop() {
@@ -143,45 +168,61 @@ namespace Mandelbrot {
 
                 if (keys['j']) mandRot -= deltaTime / 4000;
                 if (keys['l']) mandRot += deltaTime / 4000;
+
+                if (keys['r']) ResetMandelbrot();
             } else {
                 if (keys['w']) {
-                    juliaPos.x += amt * juliaZoom * (float)Math.Sin(mandRot);
-                    juliaPos.y += amt * juliaZoom * (float)Math.Cos(mandRot);
+                    juliaPos.x += amt * juliaZoom * (float)Math.Sin(juliaRot);
+                    juliaPos.y += amt * juliaZoom * (float)Math.Cos(juliaRot);
                 }
                 if (keys['s']) {
-                    juliaPos.x -= amt * juliaZoom * (float)Math.Sin(mandRot);
-                    juliaPos.y -= amt * juliaZoom * (float)Math.Cos(mandRot);
+                    juliaPos.x -= amt * juliaZoom * (float)Math.Sin(juliaRot);
+                    juliaPos.y -= amt * juliaZoom * (float)Math.Cos(juliaRot);
                 }
                 if (keys['d']) {
-                    juliaPos.x += amt * juliaZoom * (float)Math.Cos(mandRot);
-                    juliaPos.y -= amt * juliaZoom * (float)Math.Sin(mandRot);
+                    juliaPos.x += amt * juliaZoom * (float)Math.Cos(juliaRot);
+                    juliaPos.y -= amt * juliaZoom * (float)Math.Sin(juliaRot);
                 }
                 if (keys['a']) {
-                    juliaPos.x -= amt * juliaZoom * (float)Math.Cos(mandRot);
-                    juliaPos.y += amt * juliaZoom * (float)Math.Sin(mandRot);
+                    juliaPos.x -= amt * juliaZoom * (float)Math.Cos(juliaRot);
+                    juliaPos.y += amt * juliaZoom * (float)Math.Sin(juliaRot);
                 }
 
                 if (keys['i']) juliaZoom = juliaZoom * (float)Math.Pow(0.9995, deltaTime);
                 if (keys['k']) juliaZoom = juliaZoom / (float)Math.Pow(0.9995, deltaTime);
-                if (juliaZoom < 0.0001f) juliaZoom = 0.0001f;
+                if (juliaZoom < 0.0001f) juliaZoom = 0.0002f;
                 if (juliaZoom > 5f) juliaZoom = 5f;
 
                 if (keys['j']) juliaRot -= deltaTime / 4000;
                 if (keys['l']) juliaRot += deltaTime / 4000;
+
+                if (keys['r']) ResetJulia();
             }
 
             float iterFactor = 0.2f;
             if (keys['y']) maxIter += deltaTime * iterFactor;
             if (keys['h']) maxIter -= deltaTime * iterFactor;
+            if (maxIter < 1) maxIter = 1;
 
-
-            Console.WriteLine(mandPos);
+            //Console.WriteLine(mandPos);
+            //mandText.SetText(String.Format("Zoom: {0:0.000000}, Position: {1}", mandZoom, CNumString(mandPos)));
+            //juliaText.SetText(String.Format("Zoom: {0:0.000000}, Position: {1}", juliaZoom, CNumString(juliaPos)));
 
             Render();
 
             Glut.glutSwapBuffers();
         }
 
+        private static string CNumString(Vector2 v) {
+            StringBuilder s = new StringBuilder(String.Format("{0:0.000000}", v.x));
+            if (v.y >= 0) {
+                s = s.Append(" + ");
+            } else {
+                s = s.Append(" - ");
+            }
+            s = s.Append(String.Format("{0:0.000000}", Math.Abs(v.x)) + "i");
+            return s.ToString();
+        }
 
         private static void OnMouseMove(int x, int y) {
             mousePos.x = x;
@@ -205,10 +246,25 @@ namespace Mandelbrot {
             juliaShader["zoom"].SetValue(juliaZoom);
             juliaShader["rot"].SetValue(Matrix4.CreateRotationZ(juliaRot));
             juliaShader["maxIter"].SetValue((int)maxIter);
-            juliaShader["c"].SetValue(mandPos);
+            juliaShader["vc"].SetValue(mandPos);
             Gl.BindBufferToShaderAttribute(juliaVertices, juliaShader, "vpos");
             Gl.BindBuffer(elements);
             Gl.DrawElements(BeginMode.TriangleStrip, elements.Count, DrawElementsType.UnsignedInt, IntPtr.Zero);
+
+            RenderText(mandText, new Vector2(-1, -1));
+            RenderText(juliaText, new Vector2(0, -1));
+        }
+
+        private static void RenderText(Text text, Vector2 translation) {
+            textShader.Use();
+            TexModel model = text.model;
+            textShader["trans"].SetValue(translation);
+            textShader["colour"].SetValue(text.font.colour);
+            Gl.BindBufferToShaderAttribute(model.vertices, textShader, "vpos");
+            Gl.BindBufferToShaderAttribute(model.uvs, textShader, "vuv");
+            Gl.BindTexture(model.texture);
+            Gl.BindBuffer(model.elements);
+            Gl.DrawElements(model.drawingMode, model.elements.Count, DrawElementsType.UnsignedInt, IntPtr.Zero);
         }
 
         private static void OnKeyDown(byte key, int x, int y) {
