@@ -11,6 +11,9 @@ uniform float zoom;
 uniform mat4 rot;
 
 uniform int maxIter;
+
+uniform vec2 c;
+
 const int specLen = 50;
 
 const float ln2 = log(2);
@@ -25,8 +28,7 @@ vec3(64, 63, 42)
 );
 
 
-float iter(vec2 c) {
-	vec2 z = vec2(0, 0);
+float iter(vec2 z) {
 	for (int i = 0; i < maxIter; i++) {
 		z = vec2(z.x * z.x - z.y * z.y + c.x, 2 * z.x * z.y + c.y);
 		if (z.x * z.x + z.y * z.y > 4) {
@@ -67,8 +69,7 @@ void main(void) {
 	z.x *= zoom;
 	z.y *= zoom;
 	z += pos;
-
-	
+	z.x -= 0.5f;
 
 	float iter = iter(z);
 	if (iter == maxIter) frag = vec4(0, 0, 0, 1);
@@ -77,5 +78,4 @@ void main(void) {
 		frag = vec4(clr, 1);
 	}
 }
-
 

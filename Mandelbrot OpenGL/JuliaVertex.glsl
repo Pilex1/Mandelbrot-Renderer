@@ -5,5 +5,5 @@ out vec2 fpos;
 
 void main(void) {
 	gl_Position = vec4(vpos, 0, 1);
-	fpos = gl_Position.xy;
+	fpos = vpos;
 }

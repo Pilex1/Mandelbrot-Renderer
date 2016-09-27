@@ -11,14 +11,24 @@ namespace Mandelbrot {
         static int width = 1200, height = 800;
         const string titleName = "Mandelbrot Renderer - Copyright Alex Tan 2016";
 
-        static ShaderProgram shader;
-        static VBO<Vector2> vertices;
+        static ShaderProgram mandShader;
+        static ShaderProgram juliaShader;
+        static VBO<Vector2> mandVertices;
+        static VBO<Vector2> juliaVertices;
         static VBO<int> elements;
 
         static bool[] keys = new bool[255];
-        static Vector2 pos = new Vector2(0, 0);
-        static float zoom = 2;
-        static float angle = 0;
+        static Vector2 mousePos = new Vector2(0, 0);
+
+        static Vector2 mandPos = new Vector2(0, 0);
+        static Vector2 juliaPos = new Vector2(0, 0);
+
+        static float mandZoom = 2;
+        static float juliaZoom = 2;
+
+        static float mandRot = 0;
+        static float juliaRot = 0;
+
         static float maxIter = 1500f;
 
         static float prevTime;
@@ -40,14 +50,20 @@ namespace Mandelbrot {
             Glut.glutInitWindowSize(width, height);
             Glut.glutCreateWindow(titleName);
 
+            //Glut.glutReshapeFunc(OnReshape);
+
             Glut.glutKeyboardFunc(OnKeyDown);
             Glut.glutKeyboardUpFunc(OnKeyUp);
+
+            Glut.glutMotionFunc(OnMouseMove);
+            Glut.glutPassiveMotionFunc(OnMouseMove);
 
             Gl.Viewport(0, 0, width, height);
             //Glut.glutEnterGameMode();
             Glut.glutDisplayFunc(delegate () { });
-            Glut.glutIdleFunc(MainGameLoop);
+            Glut.glutIdleFunc(MainLoop);
 
+            Text.Init("Chiller");
             Init();
 
             Glut.glutMainLoop();
@@ -57,21 +73,33 @@ namespace Mandelbrot {
         }
 
         private static void Init() {
-            shader = new ShaderProgram(LoadFromFile("Vertex.glsl"), LoadFromFile("Fragment.glsl"));
-            Debug.WriteLine("Shader Log: ");
-            Debug.WriteLine(shader.ProgramLog);
-            shader.Use();
-
-            vertices = new VBO<Vector2>(new Vector2[] {
+            mandShader = new ShaderProgram(LoadFromFile("MandelbrotVertex.glsl"), LoadFromFile("MandelbrotFragment.glsl"));
+            Console.WriteLine("Mandelbrot shader log: ");
+            Console.WriteLine(mandShader.ProgramLog);
+            Console.WriteLine();
+            mandShader.Use();
+            mandVertices = new VBO<Vector2>(new Vector2[] {
                 new Vector2(-1,1),
                 new Vector2(-1,-1),
+                new Vector2(0,-1),
+                new Vector2(0,1)
+            });
+
+            juliaShader = new ShaderProgram(LoadFromFile("JuliaVertex.glsl"), LoadFromFile("JuliaFragment.glsl"));
+            Console.WriteLine("Julia shader log: ");
+            Console.WriteLine(juliaShader.ProgramLog);
+            Console.WriteLine();
+            juliaVertices = new VBO<Vector2>(new Vector2[] {
+                new Vector2(0,1),
+                new Vector2(0,-1),
                 new Vector2(1,-1),
                 new Vector2(1,1)
             });
+
             elements = new VBO<int>(new int[] { 0, 1, 2, 3, 0 }, BufferTarget.ElementArrayBuffer);
         }
 
-        private static void MainGameLoop() {
+        private static void MainLoop() {
             Gl.ClearColor(0, 0, 1, 1);
             Gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
@@ -86,57 +114,105 @@ namespace Mandelbrot {
                 countTime = 0;
                 countTimeFrames = 0;
             }
-            Glut.glutSetWindowTitle(titleName + " | Zoom: " + String.Format("{0:0.000000}", zoom) + " | Max Iterations: " + (int)maxIter + " | FPS: " + fps);
+            Glut.glutSetWindowTitle(titleName + " | Zoom: " + String.Format("{0:0.000000}", mandZoom) + " / " + String.Format("{0:0.000000}", juliaZoom) + " | Max Iterations: " + (int)maxIter + " | FPS: " + fps);
             watch.Start();
 
             float amt = deltaTime / 2000;
-            if (keys['w']) {
-                pos.x += amt * zoom * (float)Math.Sin(angle);
-                pos.y += amt * zoom * (float)Math.Cos(angle);
-            }
-            if (keys['s']) {
-                pos.x -= amt * zoom * (float)Math.Sin(angle);
-                pos.y -= amt * zoom * (float)Math.Cos(angle);
-            }
-            if (keys['d']) {
-                pos.x += amt * zoom * (float)Math.Cos(angle);
-                pos.y -= amt * zoom * (float)Math.Sin(angle);
-            }
-            if (keys['a']) {
-                pos.x -= amt * zoom * (float)Math.Cos(angle);
-                pos.y += amt * zoom * (float)Math.Sin(angle);
-            }
+            if (mousePos.x < width / 2) {
+                if (keys['w']) {
+                    mandPos.x += amt * mandZoom * (float)Math.Sin(mandRot);
+                    mandPos.y += amt * mandZoom * (float)Math.Cos(mandRot);
+                }
+                if (keys['s']) {
+                    mandPos.x -= amt * mandZoom * (float)Math.Sin(mandRot);
+                    mandPos.y -= amt * mandZoom * (float)Math.Cos(mandRot);
+                }
+                if (keys['d']) {
+                    mandPos.x += amt * mandZoom * (float)Math.Cos(mandRot);
+                    mandPos.y -= amt * mandZoom * (float)Math.Sin(mandRot);
+                }
+                if (keys['a']) {
+                    mandPos.x -= amt * mandZoom * (float)Math.Cos(mandRot);
+                    mandPos.y += amt * mandZoom * (float)Math.Sin(mandRot);
+                }
 
-            if (keys['i']) zoom = zoom * (float)Math.Pow(0.9995, deltaTime);
-            if (keys['k']) zoom = zoom / (float)Math.Pow(0.9995, deltaTime);
-            if (zoom < 0.0001f) zoom = 0.0001f;
-            if (zoom > 5f) zoom = 5f;
+                if (keys['i']) mandZoom = mandZoom * (float)Math.Pow(0.9995, deltaTime);
+                if (keys['k']) mandZoom = mandZoom / (float)Math.Pow(0.9995, deltaTime);
+                if (mandZoom < 0.0001f) mandZoom = 0.0001f;
+                if (mandZoom > 5f) mandZoom = 5f;
 
-            if (keys['j']) angle -= deltaTime / 4000;
-            if (keys['l']) angle += deltaTime / 4000;
+                if (keys['j']) mandRot -= deltaTime / 4000;
+                if (keys['l']) mandRot += deltaTime / 4000;
+            } else {
+                if (keys['w']) {
+                    juliaPos.x += amt * juliaZoom * (float)Math.Sin(mandRot);
+                    juliaPos.y += amt * juliaZoom * (float)Math.Cos(mandRot);
+                }
+                if (keys['s']) {
+                    juliaPos.x -= amt * juliaZoom * (float)Math.Sin(mandRot);
+                    juliaPos.y -= amt * juliaZoom * (float)Math.Cos(mandRot);
+                }
+                if (keys['d']) {
+                    juliaPos.x += amt * juliaZoom * (float)Math.Cos(mandRot);
+                    juliaPos.y -= amt * juliaZoom * (float)Math.Sin(mandRot);
+                }
+                if (keys['a']) {
+                    juliaPos.x -= amt * juliaZoom * (float)Math.Cos(mandRot);
+                    juliaPos.y += amt * juliaZoom * (float)Math.Sin(mandRot);
+                }
+
+                if (keys['i']) juliaZoom = juliaZoom * (float)Math.Pow(0.9995, deltaTime);
+                if (keys['k']) juliaZoom = juliaZoom / (float)Math.Pow(0.9995, deltaTime);
+                if (juliaZoom < 0.0001f) juliaZoom = 0.0001f;
+                if (juliaZoom > 5f) juliaZoom = 5f;
+
+                if (keys['j']) juliaRot -= deltaTime / 4000;
+                if (keys['l']) juliaRot += deltaTime / 4000;
+            }
 
             float iterFactor = 0.2f;
             if (keys['y']) maxIter += deltaTime * iterFactor;
             if (keys['h']) maxIter -= deltaTime * iterFactor;
+
+
+            Console.WriteLine(mandPos);
 
             Render();
 
             Glut.glutSwapBuffers();
         }
 
+
+        private static void OnMouseMove(int x, int y) {
+            mousePos.x = x;
+            mousePos.y = y;
+        }
+
         private static void Render() {
-            shader.Use();
-            shader["pos"].SetValue(pos);
-            shader["aspectRatio"].SetValue((float)width / height);
-            shader["zoom"].SetValue(zoom);
-            shader["rot"].SetValue(Matrix4.CreateRotationZ(angle));
-            shader["maxIter"].SetValue((int)maxIter);
-            Gl.BindBufferToShaderAttribute(vertices, shader, "vpos");
+            mandShader.Use();
+            mandShader["pos"].SetValue(mandPos);
+            mandShader["aspectRatio"].SetValue((float)width / height);
+            mandShader["zoom"].SetValue(mandZoom);
+            mandShader["rot"].SetValue(Matrix4.CreateRotationZ(mandRot));
+            mandShader["maxIter"].SetValue((int)maxIter);
+            Gl.BindBufferToShaderAttribute(mandVertices, mandShader, "vpos");
+            Gl.BindBuffer(elements);
+            Gl.DrawElements(BeginMode.TriangleStrip, elements.Count, DrawElementsType.UnsignedInt, IntPtr.Zero);
+
+            juliaShader.Use();
+            juliaShader["pos"].SetValue(juliaPos);
+            juliaShader["aspectRatio"].SetValue((float)width / height);
+            juliaShader["zoom"].SetValue(juliaZoom);
+            juliaShader["rot"].SetValue(Matrix4.CreateRotationZ(juliaRot));
+            juliaShader["maxIter"].SetValue((int)maxIter);
+            juliaShader["c"].SetValue(mandPos);
+            Gl.BindBufferToShaderAttribute(juliaVertices, juliaShader, "vpos");
             Gl.BindBuffer(elements);
             Gl.DrawElements(BeginMode.TriangleStrip, elements.Count, DrawElementsType.UnsignedInt, IntPtr.Zero);
         }
 
         private static void OnKeyDown(byte key, int x, int y) {
+            key = (byte)char.ToLower((char)key);
             keys[key] = true;
             if (key == 27) Glut.glutLeaveMainLoop();
         }
@@ -145,11 +221,15 @@ namespace Mandelbrot {
             keys[key] = false;
         }
 
+        private static void OnReshape(int width, int height) {
+            Glut.glutSetWindowTitle("OIIII STOP RESIZING THE WINDOW - DODGY STUFF IS HAPPENING");
+        }
+
         private static void CleanUp() {
-            vertices.Dispose();
+            mandVertices.Dispose();
             elements.Dispose();
-            shader.DisposeChildren = true;
-            shader.Dispose();
+            mandShader.DisposeChildren = true;
+            mandShader.Dispose();
         }
 
         private static string LoadFromFile(string source) {
